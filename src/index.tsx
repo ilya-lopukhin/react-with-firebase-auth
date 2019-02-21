@@ -30,27 +30,44 @@ export type ProvidersMapper = {
   githubProvider?:  firebase.auth.GithubAuthProvider_Instance;
 };
 
+export type EventHooks = {
+  onSignOut?: () => void;
+  onAuthStateChange?: (user: firebase.User) => void;
+  onProviderSignIn?: (result: firebase.auth.UserCredential, provider: PossibleProviders) => void;
+};
+
 export type HocParameters = {
   firebaseAppAuth: firebase.auth.Auth,
-  providers?: ProvidersMapper
+  providers?: ProvidersMapper,
+  hooks?: EventHooks,
 };
 
 const withFirebaseAuth = ({
   firebaseAppAuth,
   providers = {},
+  hooks = {}
 }: HocParameters) =>
   (WrappedComponent: React.SFC<WrappedComponentProps>) => {
     return class FirebaseAuthProvider extends React.PureComponent {
-      static displayName = `withFirebaseAuth(${WrappedComponent.displayName || WrappedComponent.name})`
+      public unregisterAuthStateObserver: () => void;
+
+      static displayName = `withFirebaseAuth(${WrappedComponent.displayName || WrappedComponent.name})`;
+
       state = {
         user: undefined,
         error: undefined,
       }
 
       componentDidMount() {
-        firebaseAppAuth.onAuthStateChanged((user: firebase.User) => {
-          this.setState({ user });
+        this.unregisterAuthStateObserver = firebaseAppAuth.onAuthStateChanged((user: firebase.User) => {
+          this.setState({ user }, () => {
+            hooks.onAuthStateChange && hooks.onAuthStateChange(user);
+          });
         });
+      }
+
+      componentWillUnmount() {
+        this.unregisterAuthStateObserver();
       }
 
       setError = (error: any) => this.setState({ error });
@@ -64,17 +81,23 @@ const withFirebaseAuth = ({
       }
 
       tryToSignInWithProvider = (provider: PossibleProviders) =>
-        this.tryTo(() => {
+        this.tryTo(async () => {
           const providerInstance = providers[provider];
 
           if (!providerInstance) {
             throw new Error(getErrorMessageForProvider(provider));
           }
 
-          firebaseAppAuth.signInWithPopup(providerInstance);
+          const result = await firebaseAppAuth.signInWithPopup(providerInstance);
+
+          hooks.onProviderSignIn && hooks.onProviderSignIn(result, provider);
         });
 
-      signOut = () => this.tryTo(() => firebaseAppAuth.signOut());
+      signOut = () => this.tryTo(async () => {
+        await firebaseAppAuth.signOut();
+        hooks.onSignOut && hooks.onSignOut();
+      });
+
       signInAnonymously = () => this.tryTo(() => firebaseAppAuth.signInAnonymously());
       signInWithGithub = () => this.tryToSignInWithProvider('githubProvider');
       signInWithTwitter = () => this.tryToSignInWithProvider('twitterProvider')
