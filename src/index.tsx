@@ -33,6 +33,7 @@ export type ProvidersMapper = {
 export type HocParameters = {
   firebaseAppAuth: firebase.auth.Auth;
   providers?: ProvidersMapper;
+  method?: 'Popup' | 'Redirect';
 };
 
 export type FirebaseAuthProviderState = {
@@ -43,6 +44,7 @@ export type FirebaseAuthProviderState = {
 const withFirebaseAuth = ({
   firebaseAppAuth,
   providers = {},
+  method = 'Popup',
 }: HocParameters) =>
   (WrappedComponent: React.SFC<WrappedComponentProps>) =>
     class FirebaseAuthProvider extends React.PureComponent<{}, FirebaseAuthProviderState> {
@@ -84,7 +86,7 @@ const withFirebaseAuth = ({
             throw new Error(getErrorMessageForProvider(provider));
           }
 
-          return firebaseAppAuth.signInWithPopup(providerInstance);
+          return firebaseAppAuth['signInWith' + method](providerInstance);
         });
 
       signOut = () =>
